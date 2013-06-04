@@ -172,7 +172,9 @@ function achecker_preprocess_node_compliance_result(&$vars) {
  * Creates HTML document with node content.
  */
 function achecker_html_create($node) {
+  // First delete all previous revisons' html files and achecker results
   achecker_node_delete($node);
+
   $html = ''; 
   $path = variable_get('file_public_path', conf_path() . '/files') . '/WCAG/';
   if (!is_dir($path)) {
@@ -194,6 +196,7 @@ function achecker_html_create($node) {
     }
   }
   $text = $html;
+  // Remove and Microsoft based entities
   $text = str_replace(
  array("\xe2\x80\x98", "\xe2\x80\x99", "\xe2\x80\x9c", "\xe2\x80\x9d", "\xe2\x80\x93", "\xe2\x80\x94", "\xe2\x80\xa6"),
  array("'", "'", '"', '"', '-', '--', '...'),
@@ -202,6 +205,7 @@ function achecker_html_create($node) {
  array(chr(145), chr(146), chr(147), chr(148), chr(150), chr(151), chr(133)),
  array("'", "'", '"', '"', '-', '--', '...'),
  $text);
+  // Remove and accents
   $text = iconv('UTF-8', 'ASCII//TRANSLIT', $text);
   $html = $text;
   file_put_contents($path . $name . '.html', $html);
