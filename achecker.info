@@ -1,4 +1,4 @@
 name = AChecker
 description = Provides reporting on the WCAG compliance of node content.
 core = 7.x
-package = other
+package = Compliance
