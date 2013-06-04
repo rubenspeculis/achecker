@@ -1,0 +1,265 @@
+<?php
+/**
+ * Implements hook_permission().
+ */
+function achecker_permission() { 
+  return array(
+    'administer achecker' => array(
+      'title' => t('Administer Achecker module'),
+      'description' => t('Perform administration tasks for Achecker module'),     
+    ),
+    'use achecker' => array(
+      'title' => t('Use Achecker module information'),
+      'description' => t('View information about WCGA compliance'),     
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function achecker_menu() {
+  $items['admin/config/achecker'] = array(
+    'title' => 'AChecker',
+    'description' => 'AChecker configuration',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('achecker_admin_settings'),
+    'access arguments' => array('administer achecker'),
+    'file' => 'achecker.admin.inc',
+    'file path' => drupal_get_path('module', 'achecker'),
+  );
+  $items['node/%node/wcag'] = array(
+    'title' => 'WCAG compliance',
+    'page callback' => 'achecker_view_compliance',
+    'page arguments' => array(1),
+    'access arguments' => array('use achecker'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'achecker.pages.inc',
+    'weight' => 100,
+  );
+  $items['admin/reports/compliance'] = array(
+    'title' => 'WCAG Compliance',
+    'page callback' => 'achecker_reports',
+    'access callback' => TRUE,
+    'file' => 'achecker.pages.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_admin_paths_alter.
+ */
+function achecker_admin_paths_alter(&$paths) {
+  $paths['node/*/wcag'] = TRUE;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function achecker_node_insert($node) {
+  $validate = variable_get('achecker_enable_validation', 0);
+  if ($validate) {
+    global $base_root;
+
+    $sess_id = variable_get('achecker_session_id', '');
+    if ($sess_id) {
+      achecker_html_create($node);
+      achecker_node_html_validate($node);
+      drupal_set_message(t('Analyses is complete'));
+    }
+    else {
+      drupal_set_message(t('Analyses isn`t complete. Please enter session ID :here', array(':here' => l(t('here'), $base_root . '/admin/config/achecker'))), 'error');
+    }
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function achecker_node_update($node) {
+  $validate = variable_get('achecker_enable_validation', 0);
+  if ($validate) {
+    global $base_root;
+
+    $sess_id = variable_get('achecker_session_id', '');
+    if ($sess_id) {
+      achecker_html_create($node);
+      achecker_node_html_validate($node);
+      drupal_set_message(t('Analyses is complete'));
+    }
+    else {
+      drupal_set_message(t('Analyses isn`t complete. Please enter session ID :here', array(':here' => l(t('here'), $base_root . '/admin/config/achecker'))), 'error');
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function achecker_node_delete($node) {
+  $files = glob(variable_get('file_public_path', conf_path() . '/files') . '/WCAG/' . '{' . $node->nid . '}' . '*' . '.html', GLOB_BRACE);
+  // Deletes all HTML files of the node.
+  foreach ($files as $file) {
+    unlink($file);
+  }
+  // Deletes all data in DB about node validation.
+  $result = db_select('achecker_result', 'a')
+    ->fields('a')
+    ->condition('nid', $node->nid, '=')
+    ->execute()
+    ->fetchAssoc();
+  $delete = db_delete('achecker_result')
+    ->condition('nid', $node->nid, '=')
+    ->execute();
+  $delete = db_delete('achecker_results')
+    ->condition('result_id', $result['result_id'], '=')
+    ->execute();
+}
+
+/**
+ * Implements hook_theme().
+ */
+function achecker_theme() {
+  return array(
+    'node_compliance_result' => array(
+      'variables' => array(
+        'nid' => NULL,
+        'vid' => NULL,
+        'status' => NULL,
+        'numOfErrors' => NULL,
+        'numOfLikelyProbs' => NULL,
+        'numOfPotProbs' => NULL,
+        'guideline' => NULL,
+        'revision' => NULL,
+        'problems' => NULL,
+      ),
+      'template' => 'node_compliance_result',
+      'path' => drupal_get_path('module', 'achecker') . '/theme',
+    ),
+    'compliance_report' => array(
+      'variables' => array(
+        'results' => NULL,
+      ),
+      'template' => 'compliance_report',
+      'path' => drupal_get_path('module', 'achecker') . '/theme',
+    ),
+  );
+}
+
+/**
+ * implements hook_preprocess_theme().
+ */
+function achecker_preprocess_node_compliance_result(&$vars) {
+  $file = '';
+  if ($vars['nid'] && file_exists(variable_get('file_public_path', conf_path() . '/files') . '/WCAG/' . $vars['nid'] . '-' . $vars['vid'] . '.html')) {
+    $file = file(variable_get('file_public_path', conf_path() . '/files') . '/WCAG/' . $vars['nid'] . '-' . $vars['vid'] . '.html' );
+  }
+  if ($file) {
+    foreach ($vars['problems'] as $problem) {
+      $number = $problem->line_number - 1;
+      if (is_int($number)) {
+        $problem->string = htmlentities($file[$number]);
+      }
+    }
+  }
+  else {
+    drupal_set_message(t('Source html file not found.'), 'error');
+  }
+}
+
+/**
+ * Creates HTML document with node content.
+ */
+function achecker_html_create($node) {
+  achecker_node_delete($node);
+  $html = ''; 
+  $path = variable_get('file_public_path', conf_path() . '/files') . '/WCAG/';
+  if (!is_dir($path)) {
+    mkdir($path);    
+  }
+  $name = $node->nid . '-' . $node->vid;
+  fopen($path . $name . '.html', 'w');
+  if ($node->body[LANGUAGE_NONE]) {
+    $html .= $node->body[LANGUAGE_NONE][0]['value'];
+  }
+  $fields = variable_get('achecker_fields', NULL);
+  if ($fields) {
+    $field_names = array();
+    $field_names = preg_split('/\s+/' , $fields);
+    foreach ($field_names as $field_name) {
+      if (property_exists($node, $field_name)) {        
+        $html .= $node->{$field_name}['und'][0]['value'];
+      }
+    }
+  }
+  $text = $html;
+  $text = str_replace(
+ array("\xe2\x80\x98", "\xe2\x80\x99", "\xe2\x80\x9c", "\xe2\x80\x9d", "\xe2\x80\x93", "\xe2\x80\x94", "\xe2\x80\xa6"),
+ array("'", "'", '"', '"', '-', '--', '...'),
+ $text);
+  $text = str_replace(
+ array(chr(145), chr(146), chr(147), chr(148), chr(150), chr(151), chr(133)),
+ array("'", "'", '"', '"', '-', '--', '...'),
+ $text);
+  $text = iconv('UTF-8', 'ASCII//TRANSLIT', $text);
+  $html = $text;
+  file_put_contents($path . $name . '.html', $html);
+  
+}
+
+/**
+ * Validates node HTML.
+ */
+function achecker_node_html_validate($node) {
+  global $base_root;
+  
+  $name = $node->nid . '-' . $node->vid;
+  $sess_id = variable_get('achecker_session_id', '');
+  $compl_stand = variable_get('achecker_compliance_standard', 'WCAG2-AA');
+  $params = array(
+    'uri' => $base_root . '/' . variable_get('file_public_path', conf_path() . '/files') . '/WCAG/' . $name . '.html',
+    'id' => $sess_id,
+    'output' => 'rest',
+    'guide' => $compl_stand,
+    'offset' => 0,
+  );
+  
+  $request = url('http://achecker.ca/checkacc.php', array('query' => $params, 'external' => TRUE));
+  
+  $response = file_get_contents($request);
+  $file = variable_get('file_public_path', conf_path() . '/files') . '/WCAG/response/response.xml';
+  if (!is_dir(variable_get('file_public_path', conf_path() . '/files') . '/WCAG/response')) {
+    mkdir(variable_get('file_public_path', conf_path() . '/files') . '/WCAG/response');
+  }
+  fopen($file, 'w');
+  file_put_contents($file, $response);
+  $response = simplexml_load_file($file);
+  $result_id = db_insert('achecker_result') 
+    ->fields(array(
+      'nid' => $node->nid,
+      'vid' => $node->vid,
+      'status' => $response->summary->status,
+      'numOfErrors' => $response->summary->NumOfErrors,
+      'numOfLikelyProbs' => $response->summary->NumOfLikelyProblems,
+      'numOfPotProbs' => $response->summary->NumOfPotentialProblems,
+      'guideline' => $response->summary->guidelines->guideline,
+    ))
+    ->execute();
+  
+  $resultsNum = count($response->results->result);
+  if ($resultsNum) {
+    for ($i = 0; $i < $resultsNum; ++$i) {
+      $insert = db_insert('achecker_results') 
+        ->fields(array(
+          'result_id' => $result_id,
+          'result_type' => $response->results->result[$i]->resultType,
+          'line_number' => $response->results->result[$i]->lineNum,
+          'errorMsg' => $response->results->result[$i]->errorMsg,
+        ))
+        ->execute();
+    }
+  }
+  
+  unlink($file);
+}
