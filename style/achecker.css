@@ -1,0 +1,11 @@
+.comp_result {
+  border: 1px solid #BEBEBE;
+  margin-bottom: 10px;
+  padding: 5px 15px 15px 15px;
+}
+.comp_result em {
+  color: red;
+}
+.comp_result .vid {
+  float: right;
+}

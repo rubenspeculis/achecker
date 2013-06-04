@@ -1,0 +1,131 @@
+<?php 
+
+/**
+ * @file
+ * Contains install and update functions for ctools.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function achecker_schema() {
+  $schema['achecker_results'] = array(
+    'description' => 'AChecker API parse response results table',
+    'fields' => array(
+      'results_id' => array(
+        'description' => 'The primary identifier for results.', 
+        'type' => 'serial', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+      ),
+      'result_id' => array(
+        'description' => 'The identifier for a result.', 
+        'type' => 'int', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+      ),
+      'result_type' => array(
+        'description' => 'Validation result type.', 
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+      ),
+      'line_number' => array(
+        'description' => 'Line number.', 
+        'type' => 'int', 
+        'unsigned' => TRUE, 
+      ),
+      'errorMsg' => array(
+        'description' => 'Validation error meessage.', 
+        'type' => 'varchar',
+        'length' => 1000,
+        'not null' => TRUE,
+      ),
+    ),
+    'foreign keys' => array(
+      'result_id' => array(
+        'table' => 'achecker_result',
+        'columns' => array('result_id' => 'result_id'),
+      ),
+    ),
+    'primary key' => array('results_id'),
+  );
+  $schema['achecker_result'] = array(
+    'description' => 'AChecker API parse response result table',
+    'fields' => array(
+      'result_id' => array(
+        'description' => 'The primary identifier for a result.', 
+        'type' => 'serial', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'The identifier for a node.', 
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'vid' => array(
+        'description' => 'The identifier for a revision.', 
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'status' => array(
+        'description' => 'Validation result type.', 
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+      ),
+      'numOfErrors' => array(
+        'description' => 'The number of errors.', 
+        'type' => 'int', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+        'defailt' => 0,
+      ),
+      'numOfLikelyProbs' => array(
+        'description' => 'The number of likely problems.', 
+        'type' => 'int', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+        'defailt' => 0,
+      ),
+      'numOfPotProbs' => array(
+        'description' => 'The number of potential problems.', 
+        'type' => 'int', 
+        'unsigned' => TRUE, 
+        'not null' => TRUE,
+        'defailt' => 0,
+      ),
+      'guideline' => array(
+        'description' => 'The guideline that has been validated against.', 
+        'type' => 'varchar', 
+        'length' => 50,
+        'not null' => TRUE,
+      ),
+    ),
+    'foreign keys' => array(
+      'nid' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+      'node_revision' => array(
+        'table' => 'node_revision',
+        'columns' => array('vid' => 'vid'),
+      ),
+    ),
+    'primary key' => array('result_id'),
+  );
+  
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function achecker_uninstall() {
+  db_query('DROP TABLE {achecker_result}');
+  db_query('DROP TABLE {achecker_results}');
+}
